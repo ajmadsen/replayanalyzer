@@ -34,8 +34,7 @@ type decoder struct {
 	bBitMask    uint32
 	aBitMask    uint32
 
-	data []RGB565
-	mask []uint8
+	img image.Image
 
 	tmp [256]byte
 }
@@ -178,24 +177,35 @@ func (d *decoder) decode(r io.Reader, configOnly bool) error {
 
 	w := (d.width + 3) / 4
 	h := (d.height + 3) / 4
-	d.data = make([]RGB565, 16*w*h)
-	d.mask = make([]uint8, 16*w*h)
+
+	pix := make([]uint8, 4*w*4*h*4)
+	stride := 4 * w * 4
 
 	for j := uint32(0); j < h; j++ {
 		for i := uint32(0); i < w; i++ {
-			b, m, err := d.decodeBlock()
+			b, err := d.decodeBlock()
 			if err != nil {
 				return err
 			}
-			copy(d.data[16*(j*w+i):], b)
-			if m == nil {
-				// awful hack to make image opaque
-				m = make([]uint8, 256)
-				for i := range m {
-					m[i] = 255
-				}
-			}
-			copy(d.mask[16*(j*w+i):], m)
+			copy(pix[(4*j+0)*stride+4*i*4:], b[0*4*4:0*4*4+4*4])
+			copy(pix[(4*j+1)*stride+4*i*4:], b[1*4*4:1*4*4+4*4])
+			copy(pix[(4*j+2)*stride+4*i*4:], b[2*4*4:2*4*4+4*4])
+			copy(pix[(4*j+3)*stride+4*i*4:], b[3*4*4:3*4*4+4*4])
+		}
+	}
+
+	switch d.fourCC {
+	case PixFmtDxt1:
+		d.img = &image.RGBA{
+			Pix:    pix,
+			Stride: int(stride),
+			Rect:   image.Rect(0, 0, int(d.width), int(d.height)),
+		}
+	case PixFmtDxt5:
+		d.img = &image.NRGBA{
+			Pix:    pix,
+			Stride: int(stride),
+			Rect:   image.Rect(0, 0, int(d.width), int(d.height)),
 		}
 	}
 
@@ -265,65 +275,25 @@ func (d *decoder) readHeader() error {
 	return nil
 }
 
-func (d *decoder) decodeBlock() ([]RGB565, []uint8, error) {
+func (d *decoder) decodeBlock() ([]uint8, error) {
 	switch d.fourCC {
 	case PixFmtDxt1:
 		_, err := io.ReadFull(d.r, d.tmp[:8])
 		if err != nil {
-			return nil, nil, fmt.Errorf("not enough data to decode block: %v", err)
+			return nil, fmt.Errorf("not enough data to decode block: %v", err)
 		}
 		b := decodeDxt1Block(d.tmp[:8], false)
-		return b, nil, nil
+		return b, nil
 	case PixFmtDxt5:
 		_, err := io.ReadFull(d.r, d.tmp[:16])
 		if err != nil {
-			return nil, nil, fmt.Errorf("not enough data to decode block: %v", err)
+			return nil, fmt.Errorf("not enough data to decode block: %v", err)
 		}
-		b, a := decodeDxt5Block(d.tmp[:16])
-		return b, a, nil
+		b := decodeDxt5Block(d.tmp[:16])
+		return b, nil
 	default:
-		return nil, nil, fmt.Errorf("not a valid fourCC code 0x%x", d.fourCC)
+		return nil, fmt.Errorf("not a valid fourCC code 0x%x", d.fourCC)
 	}
-}
-
-type ddsImage struct {
-	data    []RGB565
-	alpha   []uint8
-	ddsType int
-
-	w int
-	h int
-}
-
-func (i *ddsImage) ColorModel() color.Model {
-	return RGB565Model
-}
-
-func (i *ddsImage) Bounds() image.Rectangle {
-	return image.Rect(0, 0, i.w, i.h)
-}
-
-func (i *ddsImage) At(x, y int) color.Color {
-	w := (i.w + 3) / 4
-
-	if !image.Pt(x, y).In(i.Bounds()) {
-		return color.RGBA{}
-	}
-
-	idx := 16*(y/4*w+x/4) + 4*(y%4) + x%4
-
-	var c color.Color
-	if i.ddsType != PixFmtDxt1 {
-		cc := color.NRGBAModel.Convert(i.data[idx]).(color.NRGBA)
-		cc.A = i.alpha[idx]
-		c = cc
-	} else {
-		cc := color.RGBAModel.Convert(i.data[idx]).(color.RGBA)
-		cc.A = i.alpha[idx]
-		c = cc
-	}
-
-	return c
 }
 
 func DecodeConfig(r io.Reader) (image.Config, error) {
@@ -331,8 +301,12 @@ func DecodeConfig(r io.Reader) (image.Config, error) {
 	if err := d.decode(r, true); err != nil {
 		return image.Config{}, err
 	}
+	model := color.NRGBAModel
+	if d.fourCC == PixFmtDxt1 {
+		model = color.RGBAModel
+	}
 	return image.Config{
-		ColorModel: RGB565Model,
+		ColorModel: model,
 		Width:      int(d.width),
 		Height:     int(d.height),
 	}, nil
@@ -341,15 +315,9 @@ func DecodeConfig(r io.Reader) (image.Config, error) {
 func Decode(r io.Reader) (image.Image, error) {
 	var d decoder
 	if err := d.decode(r, false); err != nil {
-		return &ddsImage{}, err
+		return &image.RGBA{}, err
 	}
-	return &ddsImage{
-		data:    d.data,
-		alpha:   d.mask,
-		ddsType: int(d.fourCC),
-		w:       int(d.width),
-		h:       int(d.height),
-	}, nil
+	return d.img, nil
 }
 
 func init() {

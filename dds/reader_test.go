@@ -115,5 +115,6 @@ func TestDecode(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		fo.Close()
 	}
 }
