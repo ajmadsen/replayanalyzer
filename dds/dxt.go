@@ -119,23 +119,14 @@ func decodeDxt3Block(b []byte) []uint8 {
 		panic("not enough data to decode block")
 	}
 
+	alpha := uint64(b[7])<<56 | uint64(b[6])<<48 | uint64(b[5])<<40 | uint64(b[4])<<32 | uint64(b[3])<<24 | uint64(b[2])<<16 | uint64(b[1])<<8 | uint64(b[0])
+
 	pix := decodeDxt1Block(b[8:], true)
-	pix[3] = (b[7]>>4)<<4 | (b[7] >> 4)
-	pix[7] = (b[7]&0x0f)<<4 | (b[7] & 0x0f)
-	pix[11] = (b[6]>>4)<<4 | (b[6] >> 4)
-	pix[15] = (b[6]&0x0f)<<4 | (b[6] & 0x0f)
-	pix[19] = (b[5]>>4)<<4 | (b[5] >> 4)
-	pix[23] = (b[5]&0x0f)<<4 | (b[5] & 0x0f)
-	pix[27] = (b[4]>>4)<<4 | (b[4] >> 4)
-	pix[31] = (b[4]&0x0f)<<4 | (b[4] & 0x0f)
-	pix[35] = (b[3]>>4)<<4 | (b[3] >> 4)
-	pix[39] = (b[3]&0x0f)<<4 | (b[3] & 0x0f)
-	pix[43] = (b[2]>>4)<<4 | (b[2] >> 4)
-	pix[47] = (b[2]&0x0f)<<4 | (b[2] & 0x0f)
-	pix[51] = (b[1]>>4)<<4 | (b[1] >> 4)
-	pix[55] = (b[1]&0x0f)<<4 | (b[1] & 0x0f)
-	pix[59] = (b[0]>>4)<<4 | (b[0] >> 4)
-	pix[63] = (b[0]&0x0f)<<4 | (b[0] & 0x0f)
+	for i := uint(0); i < 16; i++ {
+		ii := i * 4
+		a := (alpha >> ii) & 0xf
+		pix[ii+3] = uint8(a)<<4 | uint8(a)
+	}
 
 	return pix
 }
