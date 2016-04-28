@@ -100,7 +100,7 @@ func decodeDxt1ABlock(b []byte) []uint8 {
 	pix := make([]uint8, 4*16)
 	for i := uint(0); i < 16; i++ {
 		ii := i * 4
-		c := (codes >> (30 - i<<1)) & 0x3
+		c := (codes >> (i << 1)) & 0x3
 		pix[ii+0] = palette[c+0]
 		pix[ii+1] = palette[c+1]
 		pix[ii+2] = palette[c+2]
