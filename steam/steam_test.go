@@ -7,7 +7,7 @@ import (
 )
 
 func TestGetSteamPath(t *testing.T) {
-	steamPath, err := getSteamPath()
+	steamPath, err := GetInstallPath()
 	if err != nil {
 		t.Error(err)
 	}
@@ -26,12 +26,12 @@ func TestGetSteamPath(t *testing.T) {
 }
 
 func TestGetLibraryPaths(t *testing.T) {
-	steamPath, err := getSteamPath()
+	steamPath, err := GetInstallPath()
 	if err != nil {
 		t.Error(err)
 	}
 
-	strings, err := getLibraryPaths(steamPath)
+	strings, err := GetLibraryPaths(steamPath)
 	if err != nil {
 		t.Error(err)
 	}

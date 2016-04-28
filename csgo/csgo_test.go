@@ -100,7 +100,7 @@ func TestGetCsgoPaths(t *testing.T) {
 		solutions[path.Join(tp, "steamapps/common/game1")] = true
 	}
 
-	ps, err := getCsgoPaths(testPaths)
+	ps, err := GetInstallPaths(testPaths)
 	if err != nil {
 		t.Error(err)
 	}

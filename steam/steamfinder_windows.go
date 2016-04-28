@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 )
 
-func getSteamPath() (string, error) {
+func GetInstallPath() (string, error) {
 	key, err := registry.OpenKey(registry.CURRENT_USER, `Software\Valve\Steam`, registry.QUERY_VALUE)
 	if err != nil {
 		return "", err

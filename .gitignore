@@ -26,3 +26,4 @@ _testmain.go
 *.swp
 .vscode
 *.dds
+**/test_output

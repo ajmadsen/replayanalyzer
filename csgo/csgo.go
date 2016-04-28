@@ -11,7 +11,7 @@ import (
 	"unicode"
 )
 
-func getCsgoPaths(libraryPaths []string) ([]string, error) {
+func GetInstallPaths(libraryPaths []string) ([]string, error) {
 	var csgoPaths []string
 	for _, p := range libraryPaths {
 		apppath := path.Join(p, "steamapps", "common")
