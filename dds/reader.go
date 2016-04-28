@@ -272,14 +272,14 @@ func (d *decoder) decodeBlock() ([]RGB565, []uint8, error) {
 		if err != nil {
 			return nil, nil, fmt.Errorf("not enough data to decode block: %v", err)
 		}
-		b := decodeDtx1Block(d.tmp[:8], false)
+		b := decodeDxt1Block(d.tmp[:8], false)
 		return b, nil, nil
 	case PixFmtDxt5:
 		_, err := io.ReadFull(d.r, d.tmp[:16])
 		if err != nil {
 			return nil, nil, fmt.Errorf("not enough data to decode block: %v", err)
 		}
-		b, a := decodeDtx5Block(d.tmp[:16])
+		b, a := decodeDxt5Block(d.tmp[:16])
 		return b, a, nil
 	default:
 		return nil, nil, fmt.Errorf("not a valid fourCC code 0x%x", d.fourCC)

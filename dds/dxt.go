@@ -29,7 +29,7 @@ func rgb565Model(c color.Color) color.Color {
 	return RGB565(nc)
 }
 
-func decodeDtx1Block(b []byte, dxt3 bool) []RGB565 {
+func decodeDxt1Block(b []byte, dxt3 bool) []RGB565 {
 	if len(b) < 8 {
 		panic("not enough data to decode block")
 	}
@@ -61,7 +61,7 @@ func decodeDtx1Block(b []byte, dxt3 bool) []RGB565 {
 	}
 }
 
-func decodeDtx1ABlock(b []byte) ([]RGB565, []uint8) {
+func decodeDxt1ABlock(b []byte) ([]RGB565, []uint8) {
 	if len(b) < 8 {
 		panic("not enough data to decode block")
 	}
@@ -150,12 +150,12 @@ func cSelect(c uint8, c0, c1 uint16) RGB565 {
 	}
 }
 
-func decodeDtx3Block(b []byte) ([]RGB565, []uint8) {
+func decodeDxt3Block(b []byte) ([]RGB565, []uint8) {
 	if len(b) < 16 {
 		panic("not enough data to decode block")
 	}
 
-	return decodeDtx1Block(b[8:], true), []uint8{
+	return decodeDxt1Block(b[8:], true), []uint8{
 		(b[7]>>4)<<4 | (b[7] >> 4),
 		(b[7]&0x0f)<<4 | (b[7] & 0x0f),
 		(b[6]>>4)<<4 | (b[6] >> 4),
@@ -175,7 +175,7 @@ func decodeDtx3Block(b []byte) ([]RGB565, []uint8) {
 	}
 }
 
-func decodeDtx5Block(b []byte) ([]RGB565, []uint8) {
+func decodeDxt5Block(b []byte) ([]RGB565, []uint8) {
 	if len(b) < 16 {
 		panic("not enough data to decode block")
 	}
@@ -183,7 +183,7 @@ func decodeDtx5Block(b []byte) ([]RGB565, []uint8) {
 	a0, a1 := b[0], b[1]
 	code := uint64(b[7])<<40 | uint64(b[6])<<32 | uint64(b[5])<<24 | uint64(b[4])<<16 | uint64(b[3])<<8 | uint64(b[2])
 
-	return decodeDtx1Block(b[8:], true), []uint8{
+	return decodeDxt1Block(b[8:], true), []uint8{
 		aBlend(uint8(code>>45)&0x7, a0, a1),
 		aBlend(uint8(code>>42)&0x7, a0, a1),
 		aBlend(uint8(code>>39)&0x7, a0, a1),
