@@ -34,7 +34,9 @@ type decoder struct {
 	bBitMask    uint32
 	aBitMask    uint32
 
-	img image.Image
+	pix       []uint8
+	pixStride int
+	img       image.Image
 
 	tmp [256]byte
 }
@@ -147,6 +149,8 @@ const (
 const (
 	// DXT1 format
 	PixFmtDxt1 = 0x31545844
+	// DXT3 format
+	PixFmtDxt3 = 0x33545844
 	// DXT5 format
 	PixFmtDxt5 = 0x35545844
 )
@@ -175,36 +179,32 @@ func (d *decoder) decode(r io.Reader, configOnly bool) error {
 		return nil
 	}
 
-	w := (d.width + 3) / 4
-	h := (d.height + 3) / 4
+	w := int(d.width+3) / 4
+	h := int(d.height+3) / 4
 
-	pix := make([]uint8, 4*w*4*h*4)
-	stride := 4 * w * 4
+	d.pix = make([]uint8, 4*w*4*h*4)
+	d.pixStride = 4 * int(w) * 4
 
-	for j := uint32(0); j < h; j++ {
-		for i := uint32(0); i < w; i++ {
-			b, err := d.decodeBlock()
+	for j := 0; j < h; j++ {
+		for i := 0; i < w; i++ {
+			err = d.decodeBlock(j*d.pixStride*4 + i*4*4)
 			if err != nil {
 				return err
 			}
-			copy(pix[(4*j+0)*stride+4*i*4:], b[0*4*4:0*4*4+4*4])
-			copy(pix[(4*j+1)*stride+4*i*4:], b[1*4*4:1*4*4+4*4])
-			copy(pix[(4*j+2)*stride+4*i*4:], b[2*4*4:2*4*4+4*4])
-			copy(pix[(4*j+3)*stride+4*i*4:], b[3*4*4:3*4*4+4*4])
 		}
 	}
 
 	switch d.fourCC {
 	case PixFmtDxt1:
 		d.img = &image.RGBA{
-			Pix:    pix,
-			Stride: int(stride),
+			Pix:    d.pix,
+			Stride: d.pixStride,
 			Rect:   image.Rect(0, 0, int(d.width), int(d.height)),
 		}
-	case PixFmtDxt5:
+	case PixFmtDxt3, PixFmtDxt5:
 		d.img = &image.NRGBA{
-			Pix:    pix,
-			Stride: int(stride),
+			Pix:    d.pix,
+			Stride: d.pixStride,
 			Rect:   image.Rect(0, 0, int(d.width), int(d.height)),
 		}
 	}
@@ -275,25 +275,24 @@ func (d *decoder) readHeader() error {
 	return nil
 }
 
-func (d *decoder) decodeBlock() ([]uint8, error) {
+func (d *decoder) decodeBlock(offset int) error {
 	switch d.fourCC {
 	case PixFmtDxt1:
 		_, err := io.ReadFull(d.r, d.tmp[:8])
 		if err != nil {
-			return nil, fmt.Errorf("not enough data to decode block: %v", err)
+			return fmt.Errorf("not enough data to decode block: %v", err)
 		}
-		b := decodeDxt1Block(d.tmp[:8], false)
-		return b, nil
+		decodeDxt1Block(d.pix[offset:], d.tmp[:8], d.pixStride, false)
 	case PixFmtDxt5:
 		_, err := io.ReadFull(d.r, d.tmp[:16])
 		if err != nil {
-			return nil, fmt.Errorf("not enough data to decode block: %v", err)
+			return fmt.Errorf("not enough data to decode block: %v", err)
 		}
-		b := decodeDxt5Block(d.tmp[:16])
-		return b, nil
+		decodeDxt5Block(d.pix[offset:], d.tmp[:16], d.pixStride)
 	default:
-		return nil, fmt.Errorf("not a valid fourCC code 0x%x", d.fourCC)
+		return fmt.Errorf("not a valid fourCC code 0x%x", d.fourCC)
 	}
+	return nil
 }
 
 func DecodeConfig(r io.Reader) (image.Config, error) {

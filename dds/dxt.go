@@ -36,7 +36,7 @@ func rgb565Model(c color.Color) color.Color {
 	return packRGB(uint8(r>>8), uint8(g>>8), uint8(b>>8))
 }
 
-func decodeDxt1Block(b []byte, dxt3 bool) []uint8 {
+func decodeDxt1Block(pix []uint8, b []byte, stride int, dxt3 bool) {
 	if len(b) < 8 {
 		panic("not enough data to decode block")
 	}
@@ -46,17 +46,14 @@ func decodeDxt1Block(b []byte, dxt3 bool) []uint8 {
 	codes := uint32(b[7])<<24 | uint32(b[6])<<16 | uint32(b[5])<<8 | uint32(b[4])
 	palette := mkPalette(c0, c1, c0 > c1 || dxt3)
 
-	pix := make([]uint8, 4*16)
 	for i := uint(0); i < 16; i++ {
-		ii := i * 4
-		c := (codes >> (i << 1)) & 0x3
+		ii := (i&3)<<2 + (i>>2)*uint(stride)
+		c := (codes >> (i << 1)) & 3
 		pix[ii+0] = palette[c*3+0]
 		pix[ii+1] = palette[c*3+1]
 		pix[ii+2] = palette[c*3+2]
 		pix[ii+3] = 0xff
 	}
-
-	return pix
 }
 
 func mkPalette(c0, c1 uint16, qColor bool) []uint8 {
@@ -87,7 +84,7 @@ func mkPalette(c0, c1 uint16, qColor bool) []uint8 {
 	}
 }
 
-func decodeDxt1ABlock(b []byte) []uint8 {
+func decodeDxt1ABlock(pix []uint8, b []byte, stride int) {
 	if len(b) < 8 {
 		panic("not enough data to decode block")
 	}
@@ -97,41 +94,36 @@ func decodeDxt1ABlock(b []byte) []uint8 {
 	codes := uint32(b[7])<<24 | uint32(b[6])<<16 | uint32(b[5])<<8 | uint32(b[4])
 	palette := mkPalette(c0, c1, c0 > c1)
 
-	pix := make([]uint8, 4*16)
 	for i := uint(0); i < 16; i++ {
-		ii := i * 4
-		c := (codes >> (i << 1)) & 0x3
-		pix[ii+0] = palette[c+0]
-		pix[ii+1] = palette[c+1]
-		pix[ii+2] = palette[c+2]
+		ii := (i&3)<<2 + (i>>2)*uint(stride)
+		c := (codes >> (i << 1)) & 3
+		pix[ii+0] = palette[c*3+0]
+		pix[ii+1] = palette[c*3+1]
+		pix[ii+2] = palette[c*3+2]
 		if c0 <= c1 && c == 3 {
 			pix[ii+2] = 0
 		} else {
 			pix[ii+2] = 0xff
 		}
 	}
-
-	return pix
 }
 
-func decodeDxt3Block(b []byte) []uint8 {
+func decodeDxt3Block(pix []uint8, b []byte, stride int) {
 	if len(b) < 16 {
 		panic("not enough data to decode block")
 	}
 
 	alpha := uint64(b[7])<<56 | uint64(b[6])<<48 | uint64(b[5])<<40 | uint64(b[4])<<32 | uint64(b[3])<<24 | uint64(b[2])<<16 | uint64(b[1])<<8 | uint64(b[0])
 
-	pix := decodeDxt1Block(b[8:], true)
+	decodeDxt1Block(pix, b[8:], stride, true)
 	for i := uint(0); i < 16; i++ {
-		ii := i * 4
+		ii := (i&3)<<2 + (i>>2)*uint(stride)
 		a := (alpha >> ii) & 0xf
 		pix[ii+3] = uint8(a)<<4 | uint8(a)
 	}
-
-	return pix
 }
 
-func decodeDxt5Block(b []byte) []uint8 {
+func decodeDxt5Block(pix []uint8, b []byte, stride int) {
 	if len(b) < 16 {
 		panic("not enough data to decode block")
 	}
@@ -140,14 +132,12 @@ func decodeDxt5Block(b []byte) []uint8 {
 	code := uint64(b[7])<<40 | uint64(b[6])<<32 | uint64(b[5])<<24 | uint64(b[4])<<16 | uint64(b[3])<<8 | uint64(b[2])
 	alphaPalette := mkAlphaPalette(a0, a1, a0 > a1)
 
-	pix := decodeDxt1Block(b[8:], true)
+	decodeDxt1Block(pix, b[8:], stride, true)
 	for i := uint(0); i < 16; i++ {
-		ii := i * 4
-		c := (code >> (3 * i)) & 0x7
+		ii := (i&3)<<2 + (i>>2)*uint(stride)
+		c := (code >> (3 * i)) & 7
 		pix[ii+3] = alphaPalette[c]
 	}
-
-	return pix
 }
 
 func mkAlphaPalette(a0, a1 uint8, upper bool) []uint8 {
