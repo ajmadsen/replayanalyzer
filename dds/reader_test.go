@@ -8,6 +8,8 @@ import (
 	"path"
 	"path/filepath"
 
+	"image"
+
 	"github.com/ajmadsen/replayanalyzer/csgo"
 	"github.com/ajmadsen/replayanalyzer/steam"
 )
@@ -23,7 +25,7 @@ func TestDecode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f, err := os.Open("de_empire_radar.dds")
+	f, err := os.Open("de_dust2_radar.dds")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +41,14 @@ func TestDecode(t *testing.T) {
 
 	i, err := Decode(f)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("could not decode directly: %v", err)
+	}
+
+	f.Seek(0, os.SEEK_SET)
+
+	i, _, err = image.Decode(f)
+	if err != nil {
+		t.Fatalf("could not decode through image API: %v", err)
 	}
 
 	fo, err := os.Create(path.Join(tstDir, "output.png"))
