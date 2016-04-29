@@ -50,7 +50,7 @@ func GetInstallPaths(libraryPaths []string) ([]string, error) {
 	return csgoPaths, nil
 }
 
-func getCsgoDemos(replayPaths []string, since time.Time) ([]string, error) {
+func GetDemos(replayPaths []string, since time.Time) ([]string, error) {
 	var demos []string
 	for _, c := range replayPaths {
 		paths, _ := filepath.Glob(path.Join(c, "*.dem"))

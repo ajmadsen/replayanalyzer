@@ -136,7 +136,7 @@ func TestGetCsgoDemos(t *testing.T) {
 		}
 	}
 
-	demos, err := getCsgoDemos(testPaths, time.Time{})
+	demos, err := GetDemos(testPaths, time.Time{})
 	if err != nil {
 		t.Error(err)
 	}
