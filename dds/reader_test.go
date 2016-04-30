@@ -36,7 +36,7 @@ func TestDecode(t *testing.T) {
 		"tests/smile_dxt1a.dds",
 		"tests/smile_dxt3.dds",
 		"tests/smile_dxt5.dds",
-		"tests/smile.rgba.dds",
+		"tests/smile_rgba.dds",
 	}
 
 	for _, name := range fnames {
