@@ -20,43 +20,78 @@ func TestDecode(t *testing.T) {
 	if err != nil {
 		t.Logf("failed to remove test directory")
 	}
+	for {
+		// wait for folder to be deleted
+		if _, err = os.Stat(tstDir); os.IsNotExist(err) {
+			break
+		}
+	}
 	err = os.Mkdir(tstDir, os.ModeDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	f, err := os.Open("de_dust2_radar.dds")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-
-	c, err := DecodeConfig(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Log(c)
-
-	f.Seek(0, os.SEEK_SET)
-
-	i, err := Decode(f)
-	if err != nil {
-		t.Fatalf("could not decode directly: %v", err)
+	fnames := []string{
+		"tests/smile_dxt1.dds",
+		"tests/smile_dxt1a.dds",
+		"tests/smile_dxt3.dds",
+		"tests/smile_dxt5.dds",
+		"tests/smile.rgba.dds",
 	}
 
-	f.Seek(0, os.SEEK_SET)
+	for _, name := range fnames {
+		f, err := os.Open(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
 
-	i, _, err = image.Decode(f)
-	if err != nil {
-		t.Fatalf("could not decode through image API: %v", err)
-	}
+		c, err := DecodeConfig(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Log(c)
 
-	fo, err := os.Create(path.Join(tstDir, "output.png"))
-	if err != nil {
-		t.Fatal(err)
+		f.Seek(0, os.SEEK_SET)
+
+		i, err := Decode(f)
+		if err != nil {
+			t.Fatalf("could not decode directly: %v", err)
+		}
+
+		f.Seek(0, os.SEEK_SET)
+
+		i, _, err = image.Decode(f)
+		if err != nil {
+			t.Fatalf("could not decode through image API: %v", err)
+		}
+
+		oname := path.Join(tstDir, filepath.Base(name)+".png")
+		fo, err := os.Create(oname)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer fo.Close()
+		err = png.Encode(fo, i)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
-	defer fo.Close()
-	err = png.Encode(fo, i)
+}
+
+func TestCSGOTextures(t *testing.T) {
+	tstDir := "./test_output"
+	err := os.RemoveAll(tstDir)
+	if err != nil {
+		t.Logf("failed to remove test directory")
+	}
+	for {
+		// wait for folder to be deleted
+		if _, err = os.Stat(tstDir); os.IsNotExist(err) {
+			break
+		}
+	}
+	err = os.Mkdir(tstDir, os.ModeDir)
 	if err != nil {
 		t.Fatal(err)
 	}

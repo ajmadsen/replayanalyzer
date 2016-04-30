@@ -27,3 +27,5 @@ _testmain.go
 .vscode
 *.dds
 **/test_output
+!**/tests
+!**/tests/*

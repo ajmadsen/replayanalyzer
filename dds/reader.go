@@ -283,6 +283,12 @@ func (d *decoder) decodeBlock(offset int) error {
 			return fmt.Errorf("not enough data to decode block: %v", err)
 		}
 		decodeDxt1Block(d.pix[offset:], d.tmp[:8], d.pixStride, false)
+	case PixFmtDxt3:
+		_, err := io.ReadFull(d.r, d.tmp[:16])
+		if err != nil {
+			return fmt.Errorf("not enough data to decode block: %v", err)
+		}
+		decodeDxt3Block(d.pix[offset:], d.tmp[:16], d.pixStride)
 	case PixFmtDxt5:
 		_, err := io.ReadFull(d.r, d.tmp[:16])
 		if err != nil {

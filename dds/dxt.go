@@ -118,7 +118,7 @@ func decodeDxt3Block(pix []uint8, b []byte, stride int) {
 	decodeDxt1Block(pix, b[8:], stride, true)
 	for i := uint(0); i < 16; i++ {
 		ii := (i&3)<<2 + (i>>2)*uint(stride)
-		a := (alpha >> ii) & 0xf
+		a := (alpha >> (i << 2)) & 0xf
 		pix[ii+3] = uint8(a)<<4 | uint8(a)
 	}
 }
