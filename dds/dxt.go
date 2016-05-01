@@ -101,9 +101,9 @@ func decodeDxt1ABlock(pix []uint8, b []byte, stride int) {
 		pix[ii+1] = palette[c*3+1]
 		pix[ii+2] = palette[c*3+2]
 		if c0 <= c1 && c == 3 {
-			pix[ii+2] = 0
+			pix[ii+3] = 0
 		} else {
-			pix[ii+2] = 0xff
+			pix[ii+3] = 0xff
 		}
 	}
 }
