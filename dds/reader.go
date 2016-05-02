@@ -1,10 +1,14 @@
 package dds
 
-import "io"
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"image"
+	"io"
+)
 
 import "bufio"
-import "image"
+
 import "image/color"
 
 type reader interface {
@@ -45,6 +49,10 @@ type decoder struct {
 	pix       []uint8
 	pixStride int
 	img       image.Image
+
+	compressed  bool
+	alphaPremul bool
+	blockSize   int
 
 	tmp [256]byte
 }
@@ -161,33 +169,67 @@ func (d *decoder) decode(r io.Reader, configOnly bool) error {
 	if err != nil {
 		return err
 	}
+
+	// compute stride
+	var pixSize int
+	switch {
+	case d.pfFlags&DdpfFourCC != 0:
+		// compressed RGB
+		d.compressed = true
+		switch d.fourCC {
+		case PixFmtDxt1:
+			d.blockSize = 8
+			d.alphaPremul = true
+		case PixFmtDxt3, PixFmtDxt5:
+			d.blockSize = 16
+			d.alphaPremul = false
+		default:
+			return fmt.Errorf("don't now how to decode compressed format 0x%x [%c%c%c%c]", d.fourCC,
+				rune(d.fourCC)&0xff,
+				rune(d.fourCC>>8)&0xff,
+				rune(d.fourCC>>16)&0xff,
+				rune(d.fourCC>>24)&0xff)
+		}
+		w := int(d.width+3) / 4
+		h := int(d.height+3) / 4
+		d.stride = w * d.blockSize
+		if d.stride < d.blockSize {
+			d.stride = d.blockSize
+		}
+		d.pixStride = w * 4 * 4 // 4*w (block size) *4 (bbp)
+		pixSize = d.pixStride * 4 * h
+	case d.pfFlags&DdpfRgb != 0:
+		// uncompressed RGB
+		d.compressed = false
+		d.alphaPremul = false
+		d.stride = int(d.width*d.rgbBitCount+7) / 8
+		w := int(d.width)
+		h := int(d.height)
+		d.pixStride = w * 4 // width * 4 bpp
+		pixSize = h * d.pixStride
+	default:
+		return errors.New("not compressed or uncompressed rgb(a) data")
+	}
+
 	if configOnly {
 		return nil
 	}
 
-	w := int(d.width+3) / 4
-	h := int(d.height+3) / 4
+	// allocations
+	d.pix = make([]uint8, pixSize)
+	d.line = make([]byte, d.stride)
 
-	d.pix = make([]uint8, 4*w*4*h*4)
-	d.pixStride = 4 * int(w) * 4
-
-	for j := 0; j < h; j++ {
-		for i := 0; i < w; i++ {
-			err = d.decodeBlock(j*d.pixStride*4 + i*4*4)
-			if err != nil {
-				return err
-			}
-		}
+	if err = d.decodeImage(); err != nil {
+		return err
 	}
 
-	switch d.fourCC {
-	case PixFmtDxt1:
+	if d.alphaPremul {
 		d.img = &image.RGBA{
 			Pix:    d.pix,
 			Stride: d.pixStride,
 			Rect:   image.Rect(0, 0, int(d.width), int(d.height)),
 		}
-	case PixFmtDxt3, PixFmtDxt5:
+	} else {
 		d.img = &image.NRGBA{
 			Pix:    d.pix,
 			Stride: d.pixStride,
@@ -306,13 +348,17 @@ func (d *decoder) computeBitShifts() {
 	}
 }
 
+func (d *decoder) decodeImage() {
+
+}
+
 func DecodeConfig(r io.Reader) (image.Config, error) {
 	var d decoder
 	if err := d.decode(r, true); err != nil {
 		return image.Config{}, err
 	}
 	model := color.NRGBAModel
-	if d.fourCC == PixFmtDxt1 {
+	if !d.alphaPremul {
 		model = color.RGBAModel
 	}
 	return image.Config{
