@@ -34,6 +34,14 @@ type decoder struct {
 	bBitMask    uint32
 	aBitMask    uint32
 
+	rBitShift uint8
+	gBitShift uint8
+	bBitShift uint8
+	aBitShift uint8
+
+	stride int
+	line   []byte
+
 	pix       []uint8
 	pixStride int
 	img       image.Image
@@ -45,25 +53,18 @@ type decoder struct {
 const (
 	// Required in every .dds file.
 	DdsdCaps = 0x1
-
 	// Required in every .dds file.
 	DdsdHeight = 0x2
-
 	// Required in every .dds file.
 	DdsdWidth = 0x4
-
 	// Required when pitch is provided for an uncompressed texture.
 	DdsdPitch = 0x8
-
 	// Required in every .dds file.
 	DdsdPixelFormat = 0x1000
-
 	// Required in a mipmapped texture.
 	DdsdMipMapCount = 0x20000
-
 	// Required when pitch is provided for a compressed texture.
 	DdsdLinearSize = 0x80000
-
 	// Required in a depth texture.
 	DdsdDepth = 0x800000
 
@@ -74,10 +75,8 @@ const (
 const (
 	// Optional; must be used on any file that contains more than one surface (a mipmap, a cubic environment map, or mipmapped volume texture).
 	DdsCapsComplex = 0x8
-
 	// Optional; should be used for a mipmap.
 	DdsCapsMipMap = 0x400000
-
 	// Required
 	DdsCapsTexture = 0x1000
 
@@ -90,25 +89,18 @@ const (
 const (
 	// Required for a cube map.
 	DdsCaps2CubeMap = 0x200
-
 	// Required when these surfaces are stored in a cube map.
 	DdsCaps2CubeMapPositiveX = 0x400
-
 	// Required when these surfaces are stored in a cube map.
 	DdsCaps2CubeMapNegativeX = 0x800
-
 	// Required when these surfaces are stored in a cube map.
 	DdsCaps2CubeMapPositiveY = 0x1000
-
 	// Required when these surfaces are stored in a cube map.
 	DdsCaps2CubeMapNegativeY = 0x2000
-
 	// Required when these surfaces are stored in a cube map.
 	DdsCaps2CubeMapPositiveZ = 0x4000
-
 	// Required when these surfaces are stored in a cube map.
 	DdsCaps2CubeMapNegativeZ = 0x8000
-
 	// Required for a volume texture.
 	DdsCaps2Volume = 0x200000
 
@@ -128,19 +120,14 @@ const (
 const (
 	// Texture contains alpha data; dwRGBAlphaBitMask contains valid data.
 	DdpfAlphaPixels = 0x1
-
 	// Used in some older DDS files for alpha channel only uncompressed data (dwRGBBitCount contains the alpha channel bitcount; dwABitMask contains valid data)
 	DdpfAlpha = 0x2
-
 	// Texture contains compressed RGB data; dwFourCC contains valid data.
 	DdpfFourCC = 0x4
-
 	// 	Texture contains uncompressed RGB data; dwRGBBitCount and the RGB masks (dwRBitMask, dwGBitMask, dwBBitMask) contain valid data.
 	DdpfRgb = 0x40
-
 	// 	Used in some older DDS files for YUV uncompressed data (dwRGBBitCount contains the YUV bit count; dwRBitMask contains the Y mask, dwGBitMask contains the U mask, dwBBitMask contains the V mask)
 	DdpfYuv = 0x200
-
 	// Used in some older DDS files for single channel color uncompressed data (dwRGBBitCount contains the luminance channel bit count; dwRBitMask contains the channel mask). Can be combined with DDPF_ALPHAPIXELS for a two channel DDS file.
 	DdpfLuminance = 0x20000
 )
@@ -158,7 +145,6 @@ const (
 const (
 	// DdsHeaderSize is the header size in bytes
 	ddsHeaderSize = 124
-
 	// PixFmtSize is the pixel format struct size in bytes
 	pixFmtSize = 32
 )
@@ -299,6 +285,25 @@ func (d *decoder) decodeBlock(offset int) error {
 		return fmt.Errorf("not a valid fourCC code 0x%x", d.fourCC)
 	}
 	return nil
+}
+
+func (d *decoder) computeBitShifts() {
+	if d.pfFlags&DdpfRgb != 0 {
+		for ; d.rBitMask&1 != 0; d.rBitMask >>= 1 {
+			d.rBitShift++
+		}
+		for ; d.gBitMask&1 != 0; d.gBitMask >>= 1 {
+			d.gBitShift++
+		}
+		for ; d.bBitMask&1 != 0; d.bBitMask >>= 1 {
+			d.bBitShift++
+		}
+	}
+	if d.pfFlags&DdpfAlphaPixels != 0 {
+		for ; d.aBitMask&1 != 0; d.aBitMask >>= 1 {
+			d.aBitShift++
+		}
+	}
 }
 
 func DecodeConfig(r io.Reader) (image.Config, error) {
