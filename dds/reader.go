@@ -47,10 +47,12 @@ type decoder struct {
 	line   []byte
 
 	pix       []uint8
+	pixSlice  []uint8
 	pixStride int
 	img       image.Image
 
 	compressed  bool
+	decompress  func(pix []uint8, b []byte, stride int)
 	alphaPremul bool
 	blockSize   int
 
@@ -138,6 +140,8 @@ const (
 	DdpfYuv = 0x200
 	// Used in some older DDS files for single channel color uncompressed data (dwRGBBitCount contains the luminance channel bit count; dwRBitMask contains the channel mask). Can be combined with DDPF_ALPHAPIXELS for a two channel DDS file.
 	DdpfLuminance = 0x20000
+
+	DdsRgba = DdpfRgb | DdpfAlphaPixels
 )
 
 // known fourCCs
@@ -180,9 +184,15 @@ func (d *decoder) decode(r io.Reader, configOnly bool) error {
 		case PixFmtDxt1:
 			d.blockSize = 8
 			d.alphaPremul = true
-		case PixFmtDxt3, PixFmtDxt5:
+			d.decompress = decodeDxt1ABlock
+		case PixFmtDxt3:
 			d.blockSize = 16
 			d.alphaPremul = false
+			d.decompress = decodeDxt3Block
+		case PixFmtDxt5:
+			d.blockSize = 16
+			d.alphaPremul = false
+			d.decompress = decodeDxt5Block
 		default:
 			return fmt.Errorf("don't now how to decode compressed format 0x%x [%c%c%c%c]", d.fourCC,
 				rune(d.fourCC)&0xff,
@@ -303,53 +313,74 @@ func (d *decoder) readHeader() error {
 	return nil
 }
 
-func (d *decoder) decodeBlock(offset int) error {
-	switch d.fourCC {
-	case PixFmtDxt1:
-		_, err := io.ReadFull(d.r, d.tmp[:8])
-		if err != nil {
-			return fmt.Errorf("not enough data to decode block: %v", err)
-		}
-		decodeDxt1ABlock(d.pix[offset:], d.tmp[:8], d.pixStride)
-	case PixFmtDxt3:
-		_, err := io.ReadFull(d.r, d.tmp[:16])
-		if err != nil {
-			return fmt.Errorf("not enough data to decode block: %v", err)
-		}
-		decodeDxt3Block(d.pix[offset:], d.tmp[:16], d.pixStride)
-	case PixFmtDxt5:
-		_, err := io.ReadFull(d.r, d.tmp[:16])
-		if err != nil {
-			return fmt.Errorf("not enough data to decode block: %v", err)
-		}
-		decodeDxt5Block(d.pix[offset:], d.tmp[:16], d.pixStride)
-	default:
-		return fmt.Errorf("not a valid fourCC code 0x%x", d.fourCC)
-	}
-	return nil
-}
-
 func (d *decoder) computeBitShifts() {
 	if d.pfFlags&DdpfRgb != 0 {
-		for ; d.rBitMask&1 != 0; d.rBitMask >>= 1 {
+		for ; d.rBitMask&1 == 0; d.rBitMask >>= 1 {
 			d.rBitShift++
 		}
-		for ; d.gBitMask&1 != 0; d.gBitMask >>= 1 {
+		for ; d.gBitMask&1 == 0; d.gBitMask >>= 1 {
 			d.gBitShift++
 		}
-		for ; d.bBitMask&1 != 0; d.bBitMask >>= 1 {
+		for ; d.bBitMask&1 == 0; d.bBitMask >>= 1 {
 			d.bBitShift++
 		}
 	}
 	if d.pfFlags&DdpfAlphaPixels != 0 {
-		for ; d.aBitMask&1 != 0; d.aBitMask >>= 1 {
+		for ; d.aBitMask&1 == 0; d.aBitMask >>= 1 {
 			d.aBitShift++
 		}
 	}
 }
 
-func (d *decoder) decodeImage() {
+func (d *decoder) decodeImage() error {
+	d.computeBitShifts()
+	d.pixSlice = d.pix[:]
 
+	// only handle 32-bit RGBA
+	if !d.compressed && d.pfFlags&DdsRgba != DdsRgba && d.rgbBitCount != 32 {
+		panic("cannot decode non-rgba uncompressed data")
+	}
+
+	h := int(d.height)
+	if d.compressed {
+		h = (h + 3) / 4
+	}
+	for i := 0; i < h; i++ {
+		if err := d.decodeLine(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (d *decoder) decodeLine() error {
+	if _, err := io.ReadFull(d.r, d.line); err != nil {
+		return fmt.Errorf("not enough data to decode line: %v", err)
+	}
+
+	// handle compressed data with the decompress function
+	if d.compressed {
+		w := int(d.width+3) / 4
+		for i := 0; i < w; i++ {
+			d.decompress(d.pixSlice[i*4*4:], d.line[i*d.blockSize:], d.pixStride)
+		}
+		d.pixSlice = d.pixSlice[4*d.pixStride:]
+		return nil
+	}
+
+	// decode 32-bit RGBA
+	w := int(d.width)
+	for i := 0; i < w; i++ {
+		c := decodeU32LE(d.line[i*4:])
+		d.pixSlice[4*i+0] = uint8((c >> d.rBitShift) & d.rBitMask)
+		d.pixSlice[4*i+1] = uint8((c >> d.gBitShift) & d.gBitMask)
+		d.pixSlice[4*i+2] = uint8((c >> d.bBitShift) & d.bBitMask)
+		d.pixSlice[4*i+3] = uint8((c >> d.aBitShift) & d.aBitMask)
+	}
+	d.pixSlice = d.pixSlice[d.pixStride:]
+
+	return nil
 }
 
 func DecodeConfig(r io.Reader) (image.Config, error) {
