@@ -55,6 +55,7 @@ type decoder struct {
 	decompress  func(pix []uint8, b []byte, stride int)
 	alphaPremul bool
 	blockSize   int
+	components  int
 
 	tmp [256]byte
 }
@@ -257,6 +258,20 @@ func decodeU32LE(dat []byte) uint32 {
 	return uint32(dat[3])<<24 | uint32(dat[2])<<16 | uint32(dat[1])<<8 | uint32(dat[0])
 }
 
+func decodeU32LEb(dat []byte, nb int) uint32 {
+	if len(dat) < nb {
+		panic("not enough data to decode uint32")
+	}
+	if nb <= 0 {
+		panic("cannot decode less than 1 byte")
+	}
+	b := uint32(0)
+	for i := nb - 1; i >= 0; i-- {
+		b = (b << 8) | uint32(dat[i])
+	}
+	return b
+}
+
 func (d *decoder) readHeader() error {
 	_, err := io.ReadFull(d.r, d.tmp[:4])
 	if err != nil {
@@ -324,6 +339,7 @@ func (d *decoder) computeBitShifts() {
 		for ; d.bBitMask&1 == 0; d.bBitMask >>= 1 {
 			d.bBitShift++
 		}
+		d.components = int(d.rgbBitCount+7) / 8
 	}
 	if d.pfFlags&DdpfAlphaPixels != 0 {
 		for ; d.aBitMask&1 == 0; d.aBitMask >>= 1 {
@@ -336,8 +352,8 @@ func (d *decoder) decodeImage() error {
 	d.computeBitShifts()
 	d.pixSlice = d.pix[:]
 
-	// only handle 32-bit RGBA
-	if !d.compressed && d.pfFlags&DdsRgba != DdsRgba && d.rgbBitCount != 32 {
+	// only handle uncompressed RGB(A) <= 32-bits
+	if (!d.compressed && d.pfFlags&DdsRgba != DdsRgba && d.pfFlags&DdpfRgb != DdpfRgb) || d.rgbBitCount > 32 {
 		panic("cannot decode non-rgba uncompressed data")
 	}
 
@@ -372,11 +388,16 @@ func (d *decoder) decodeLine() error {
 	// decode 32-bit RGBA
 	w := int(d.width)
 	for i := 0; i < w; i++ {
-		c := decodeU32LE(d.line[i*4:])
-		d.pixSlice[4*i+0] = uint8((c >> d.rBitShift) & d.rBitMask)
-		d.pixSlice[4*i+1] = uint8((c >> d.gBitShift) & d.gBitMask)
-		d.pixSlice[4*i+2] = uint8((c >> d.bBitShift) & d.bBitMask)
-		d.pixSlice[4*i+3] = uint8((c >> d.aBitShift) & d.aBitMask)
+		c := decodeU32LEb(d.line[i*d.components:], d.components)
+
+		d.pixSlice[4*i+0] = uint8(255 * ((c >> d.rBitShift) & d.rBitMask) / d.rBitMask)
+		d.pixSlice[4*i+1] = uint8(255 * ((c >> d.gBitShift) & d.gBitMask) / d.gBitMask)
+		d.pixSlice[4*i+2] = uint8(255 * ((c >> d.bBitShift) & d.bBitMask) / d.bBitMask)
+		if d.pfFlags&DdpfAlphaPixels == DdpfAlphaPixels {
+			d.pixSlice[4*i+3] = uint8(255 * ((c >> d.aBitShift) & d.aBitMask) / d.aBitMask)
+		} else {
+			d.pixSlice[4*i+3] = 0xff
+		}
 	}
 	d.pixSlice = d.pixSlice[d.pixStride:]
 
